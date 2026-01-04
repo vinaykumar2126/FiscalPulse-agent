@@ -11,15 +11,16 @@ class MCPManager:
     """
     def __init__(self, db_url, docs_path):
         self.db_params = StdioServerParameters(
-            command="npx.cmd",
+            command="npx",
             args=["@modelcontextprotocol/server-postgres", db_url],
             env=os.environ.copy()
         )
         self.fs_params = StdioServerParameters(
-            command="npx.cmd",
+            command="npx",
             args=["@modelcontextprotocol/server-filesystem", docs_path],
             env=os.environ.copy()
         )
+        print("Filesystem root:", docs_path)
 
     async def fetch_audit_data(self):
         """Connects to both servers and returns the raw data."""
@@ -38,8 +39,9 @@ class MCPManager:
                 })
                 
                 # 2. Get Rules
+                print("DEBUG read_file path sent to MCP:", "/Users/vinaykumargodavarti/tax-docs/tax_docs.md")
                 rules_result = await fs_session.call_tool("read_file", {
-                    "path": "tax_rules.md"
+                    "path": "/Users/vinaykumargodavarti/tax-docs/tax_docs.md"
                 })
 
                 return {

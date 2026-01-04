@@ -1,10 +1,8 @@
 import os
-import google.generativeai as genai
 from dotenv import load_dotenv
 
 # Load API Key from .env file
 load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 class AgentBrain:
     """
