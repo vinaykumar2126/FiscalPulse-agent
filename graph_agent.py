@@ -1,7 +1,7 @@
 import os
 from typing import TypedDict, Annotated, List, Union
 from langgraph.graph import StateGraph, END
-import google.generativeai as genai
+import ollama
 from dotenv import load_dotenv
 from mcp_manager import MCPManager
 
@@ -17,51 +17,81 @@ class AgentState(TypedDict):
     final_output: str
 
 # 2. Initialize the Specialists
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('models/gemini-1.5-flash')
+# Initialize MCP Manager
 mcp = MCPManager(
-    db_url="postgresql://localhost:5432/finance_db",
-    docs_path="D:\\tax-docs"
+    db_url="postgresql://localhost:5432/postgres",
+    docs_path="/Users/vinaykumargodavarti/tax-docs" 
 )
-
 # --- NODES (The Stations) ---
 
 async def router_node(state: AgentState):
     try:
         """Classifies the intent to decide which data to fetch."""
         print("[Node: Router] Classifying intent...")
-        prompt = f"Categorize this financial query: '{state['query']}'. Reply with only one word: 'DATABASE', 'FILESYSTEM', or 'GENERAL'."
-        response = model.generate_content(prompt)
-        return {"category": response.text.strip().upper()}
+        prompt = f"Categorize this financial query: '{state['query']}'. Reply with only one word: 'DATABASE', 'FILESYSTEM'"
+        response = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
+        # print(response)
+        return {"category": response["message"]["content"].strip().upper()}
+
     except Exception as e:
         print(f"[Node: Router] Error: {e}")
         return {"category": "GENERAL"}
 
 async def fetcher_node(state: AgentState):
-    if not state['category']: 
-        print("[Node: Fetcher] No data fetch needed for GENERAL category.")
+    if state["category"] == "GENERAL":
+        print("[Node: Fetcher] Skipping MCP fetch for GENERAL.")
         return {"raw_data": {}}
     """The Librarian: Fetches data via MCP based on the category."""
     print(f"[Node: Fetcher] Accessing MCP for {state['category']}...")
     # Using our existing MCP Manager
     try:
+        def unwrap_textcontent(value):
+            if isinstance(value, list):
+                return value[0].text
+            return value
         data = await mcp.fetch_audit_data()
-        return {"raw_data": data}
+        # print(f"DEBUG: Transactions found: {bool(data['transactions'])}")
+        # print(f"DEBUG: Rules found: {data['rules']}") # See if this is empty!
+        # print(data["transactions"])
+        return {
+    "raw_data": {
+        "transactions": unwrap_textcontent(data["transactions"]),
+        "rules": unwrap_textcontent(data["rules"])
+    }
+}
     except Exception as e:
         print(f"[Node: Fetcher] Error fetching data: {e}")
         return {"raw_data": {}}
+    
 async def auditor_node(state: AgentState):
-    """The Specialist: Compares transactions to rules."""
-    print("[Node: Auditor] Performing reasoning...")
+    print("[Node: Auditor] Performing reasoning against tax rules...")
+    
+    if not state['raw_data']:        
+        return {"audit_report": "No data available for audit."}
+
+    # Enhanced Prompt for specialized auditing
     prompt = f"""
-    Compare these transactions to the rules:
-    Transactions: {state['raw_data']['transactions']}
-    Rules: {state['raw_data']['rules']}
-    User Question: {state['query']}
-    Provide a concise audit summary.
+    You are a professional Financial Auditor.
+    
+    USER QUERY: {state['query']}
+    
+    DATA PROVIDED:
+    1. Transactions (from Database): 
+    {state['raw_data']['transactions']}
+    
+    2. Tax Rules (from Filesystem):
+    {state['raw_data']['rules']}
+    
+    TASK:
+    1. Identify all transactions relevant to the user's query.
+    2. Compare these transactions against the Tax Rules provided.
+    3. Flag any discrepancies (e.g., if a hardware purchase exceeds a limit in the rules).
+    4. Provide a summary in a clean Markdown format.
     """
-    response = model.generate_content(prompt)
-    return {"audit_report": response.text}
+    
+    response = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
+    analysis = response["message"]["content"]
+    return {"audit_report": analysis}
 
 async def preparer_node(state: AgentState):
     """The Clerk: Fills the form if needed."""

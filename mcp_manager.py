@@ -7,10 +7,10 @@ from mcp.client.stdio import stdio_client
 class MCPManager:
     """
     Handles the 'Bridges' to your local data.
-    This class is responsible for talking to the MCP servers.
+    This class is responsible for talking to the MCP servers. 
     """
     def __init__(self, db_url, docs_path):
-        self.db_params = StdioServerParameters(
+        self.db_params = StdioServerParameters( # Set up the MCP server parameters, tells it how to start
             command="npx",
             args=["@modelcontextprotocol/server-postgres", db_url],
             env=os.environ.copy()
@@ -23,7 +23,7 @@ class MCPManager:
         print("Filesystem root:", docs_path)
 
     async def fetch_audit_data(self):
-        """Connects to both servers and returns the raw data."""
+        """Connects to both servers and returns the raw data."""  # Actually making the connection with MCP
         async with stdio_client(self.fs_params) as (f_read, f_write), \
                    stdio_client(self.db_params) as (d_read, d_write):
             
@@ -41,10 +41,12 @@ class MCPManager:
                 # 2. Get Rules
                 print("DEBUG read_file path sent to MCP:", "/Users/vinaykumargodavarti/tax-docs/tax_docs.md")
                 rules_result = await fs_session.call_tool("read_file", {
-                    "path": "/Users/vinaykumargodavarti/tax-docs/tax_docs.md"
+                    "path": "/Users/vinaykumargodavarti/tax-docs/tax_docs.md" #Full path because if i give only filename, it looks in root(where my application is running)
                 })
 
                 return {
                     "transactions": str(db_result.content),
                     "rules": str(rules_result.content)
                 }
+            
+
